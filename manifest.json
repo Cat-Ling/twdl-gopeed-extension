@@ -1,11 +1,11 @@
 {
   "name": "twitter-media-dl",
-  "author": "luna",
-  "title": "Twitter/X Media Downloader",
+  "author": "Cat-Ling",
+  "title": "Twitter/X Downloader",
   "description": "Download images and videos from Twitter/X using vxtwitter/fxtwitter API.",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "repository": {
-    "url": "https://github.com/GopeedLab/gopeed-extension-samples"
+    "url": "https://github.com/Cat-Ling/twdl-gopeed-extension"
   },
   "settings": [
     {
