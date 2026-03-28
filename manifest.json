@@ -38,10 +38,10 @@
     },
     {
       "name": "enableDeduplication",
-      "title": "Enable Deduplication",
+      "title": "Enable Deduplication - Experimental",
       "description": "Prevent downloading the same tweet multiple times",
       "type": "boolean",
-      "value": true
+      "value": false
     }
   ],
   "scripts": [
