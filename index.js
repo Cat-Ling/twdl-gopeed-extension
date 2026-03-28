@@ -1,33 +1,5 @@
 var DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36";
 
-function base64Encode(str) {
-  var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  var out = "", i = 0, len = str.length, c1, c2, c3;
-  while (i < len) {
-    c1 = str.charCodeAt(i++) & 0xff;
-    if (i == len) {
-      out += chars.charAt(c1 >> 2);
-      out += chars.charAt((c1 & 0x3) << 4);
-      out += "==";
-      break;
-    }
-    c2 = str.charCodeAt(i++);
-    if (i == len) {
-      out += chars.charAt(c1 >> 2);
-      out += chars.charAt(((c1 & 0x3) << 4) | ((c2 & 0xF0) >> 4));
-      out += chars.charAt((c2 & 0xF) << 2);
-      out += "=";
-      break;
-    }
-    c3 = str.charCodeAt(i++);
-    out += chars.charAt(c1 >> 2);
-    out += chars.charAt(((c1 & 0x3) << 4) | ((c2 & 0xF0) >> 4));
-    out += chars.charAt(((c2 & 0xF) << 2) | ((c3 & 0xC0) >> 6));
-    out += chars.charAt(c3 & 0x3F);
-  }
-  return out;
-}
-
 gopeed.events.onResolve(function (ctx) {
   var settings = gopeed.settings || {};
   function isTrue(val) { return val === true || val === "true"; }
@@ -36,6 +8,7 @@ gopeed.events.onResolve(function (ctx) {
   var sortByDate = isTrue(settings.sortByDate);
   var sortByType = isTrue(settings.sortByType);
   var saveJson = isTrue(settings.saveJson);
+  var enableDeduplication = isTrue(settings.enableDeduplication);
 
   var tweetRegex = /(?:twitter\.com|x\.com|vxtwitter\.com|fxtwitter\.com|fixupx\.com)\/(\w+)\/status\/(\d+)/i;
   var matches = ctx.req.url.match(tweetRegex);
@@ -43,6 +16,14 @@ gopeed.events.onResolve(function (ctx) {
 
   var username = matches[1];
   var tweetID = matches[2];
+
+  // 1. Deduplication Check
+  if (enableDeduplication && typeof gopeed !== 'undefined' && gopeed.storage) {
+    var history = gopeed.storage.get("downloaded_ids") || "";
+    if (history.indexOf(tweetID) !== -1) {
+      throw new Error("Tweet " + tweetID + " has already been downloaded (Deduplication enabled).");
+    }
+  }
 
   return fetch("https://api.vxtwitter.com/" + username + "/status/" + tweetID, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; Discordbot/2.0)", "Accept": "application/json" }
@@ -54,6 +35,8 @@ gopeed.events.onResolve(function (ctx) {
 
     var cleanText = (metadata.text || "tweet").replace(/https?:\/\/\S+/g, "").replace(/[^a-zA-Z0-9]+/g, "_").trim();
     var slug = cleanText.substring(0, 50).replace(/^_+|_+$/g, "") || "tweet";
+    
+    // Path breakout into shared Twitter folder
     var breakoutPath = "../Twitter/";
     if (sortByNames) breakoutPath += metadata.user_screen_name + "/";
     
@@ -82,20 +65,37 @@ gopeed.events.onResolve(function (ctx) {
       return {
         name: slug + "_" + tweetID + "_" + (index + 1) + ext,
         path: itemPath,
-        req: { url: downloadUrl, extra: { header: { "User-Agent": DEFAULT_UA, "Referer": "https://twitter.com/" } } }
+        req: { 
+          url: downloadUrl, 
+          extra: { header: { "User-Agent": DEFAULT_UA, "Referer": "https://twitter.com/" } } 
+        }
       };
     });
 
     if (saveJson) {
+      // Put JSON in the same folder as the first media item
+      var jsonPath = breakoutPath;
+      if (files.length > 0) jsonPath = files[0].path;
+
       files.push({
         name: slug + "_" + tweetID + "_metadata.json",
-        path: breakoutPath,
-        req: { url: "data:application/json;base64," + base64Encode(JSON.stringify(metadata, null, 2)) }
+        path: jsonPath,
+        req: { 
+          url: "https://api.vxtwitter.com/" + username + "/status/" + tweetID,
+          extra: { header: { "User-Agent": "Mozilla/5.0 (compatible; Discordbot/2.0)", "Accept": "application/json" } }
+        }
       });
+    }
+
+    // 2. Update History (Mark as seen)
+    if (enableDeduplication && gopeed.storage) {
+      var currentHistory = gopeed.storage.get("downloaded_ids") || "";
+      gopeed.storage.set("downloaded_ids", currentHistory + "," + tweetID);
     }
 
     ctx.res = { name: metadata.user_screen_name + "_" + tweetID, files: files };
   }).catch(function (err) {
     if (typeof gopeed !== 'undefined' && gopeed.logger) gopeed.logger.error("Twitter Error: " + err.message);
+    throw err;
   });
 });

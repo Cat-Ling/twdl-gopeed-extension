@@ -3,7 +3,7 @@
   "author": "luna",
   "title": "Twitter/X Media Downloader",
   "description": "Download images and videos from Twitter/X using vxtwitter/fxtwitter API.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "repository": {
     "url": "https://github.com/GopeedLab/gopeed-extension-samples"
   },
@@ -35,6 +35,13 @@
       "description": "Save a JSON file with tweet metadata alongside the media",
       "type": "boolean",
       "value": false
+    },
+    {
+      "name": "enableDeduplication",
+      "title": "Enable Deduplication",
+      "description": "Prevent downloading the same tweet multiple times",
+      "type": "boolean",
+      "value": true
     }
   ],
   "scripts": [
