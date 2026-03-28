@@ -1,121 +1,101 @@
-const DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36";
+var DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36";
 
-gopeed.events.onResolve(async (ctx) => {
-  const settings = gopeed.settings || {};
-  gopeed.logger.info("Settings received: " + JSON.stringify(settings));
-  const isTrue = (val) => val === true || val === "true";
-  
-  const sortByNames = isTrue(settings.sortByNames);
-  const sortByDate = isTrue(settings.sortByDate);
-  const sortByType = isTrue(settings.sortByType);
-  const saveJson = isTrue(settings.saveJson);
-
-  const url = ctx.req.url;
-  const tweetRegex = /(?:twitter\.com|x\.com|vxtwitter\.com|fxtwitter\.com|fixupx\.com)\/(\w+)\/status\/(\d+)/i;
-  const matches = url.match(tweetRegex);
-
-  if (!matches) {
-    throw new Error("Invalid Twitter/X URL format.");
+function base64Encode(str) {
+  var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  var out = "", i = 0, len = str.length, c1, c2, c3;
+  while (i < len) {
+    c1 = str.charCodeAt(i++) & 0xff;
+    if (i == len) {
+      out += chars.charAt(c1 >> 2);
+      out += chars.charAt((c1 & 0x3) << 4);
+      out += "==";
+      break;
+    }
+    c2 = str.charCodeAt(i++);
+    if (i == len) {
+      out += chars.charAt(c1 >> 2);
+      out += chars.charAt(((c1 & 0x3) << 4) | ((c2 & 0xF0) >> 4));
+      out += chars.charAt((c2 & 0xF) << 2);
+      out += "=";
+      break;
+    }
+    c3 = str.charCodeAt(i++);
+    out += chars.charAt(c1 >> 2);
+    out += chars.charAt(((c1 & 0x3) << 4) | ((c2 & 0xF0) >> 4));
+    out += chars.charAt(((c2 & 0xF) << 2) | ((c3 & 0xC0) >> 6));
+    out += chars.charAt(c3 & 0x3F);
   }
+  return out;
+}
 
-  const username = matches[1];
-  const tweetID = matches[2];
-
-  let metadata = null;
-  // Try vxtwitter API
-  try {
-    const response = await fetch(`https://api.vxtwitter.com/${username}/status/${tweetID}`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
-        "Accept": "application/json"
-      }
-    });
-    if (response.ok) {
-      metadata = await response.json();
-    }
-  } catch (e) {}
-
-  if (!metadata) throw new Error("Could not find any media. Tweet might be private or deleted.");
-
-  const cleanText = (metadata.text || "tweet")
-    .replace(/https?:\/\/\S+/g, "")
-    .replace(/[^a-zA-Z0-9\u4e00-\u9fa5]+/g, "_")
-    .trim();
-  const slug = cleanText.substring(0, 50).replace(/^_+|_+$/g, "") || "tweet";
+gopeed.events.onResolve(function (ctx) {
+  var settings = gopeed.settings || {};
+  function isTrue(val) { return val === true || val === "true"; }
   
-  // 1. Base Subdir
-  let relativePath = "Twitter/";
+  var sortByNames = isTrue(settings.sortByNames);
+  var sortByDate = isTrue(settings.sortByDate);
+  var sortByType = isTrue(settings.sortByType);
+  var saveJson = isTrue(settings.saveJson);
 
-  // 2. Sort by Name
-  if (sortByNames) {
-    relativePath += metadata.user_screen_name + "/";
-  }
+  var tweetRegex = /(?:twitter\.com|x\.com|vxtwitter\.com|fxtwitter\.com|fixupx\.com)\/(\w+)\/status\/(\d+)/i;
+  var matches = ctx.req.url.match(tweetRegex);
+  if (!matches) throw new Error("Invalid Twitter URL");
 
-  const files = metadata.media_extended.map((item, index) => {
-    let downloadUrl = item.url;
-    let ext = ".jpg";
-    let typeSubdir = "images/";
+  var username = matches[1];
+  var tweetID = matches[2];
 
-    if (item.type === "video" || item.type === "gif" || downloadUrl.includes(".mp4")) {
-      ext = ".mp4";
-      typeSubdir = "videos/";
-    } else if (downloadUrl.includes(".png") || downloadUrl.includes("format=png")) {
-      ext = ".png";
-    }
+  return fetch("https://api.vxtwitter.com/" + username + "/status/" + tweetID, {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; Discordbot/2.0)", "Accept": "application/json" }
+  }).then(function (res) {
+    if (!res.ok) throw new Error("API failed: " + res.status);
+    return res.json();
+  }).then(function (metadata) {
+    if (!metadata || !metadata.media_extended) throw new Error("No media found");
 
-    // 3. Sort by Type
-    let itemRelativePath = relativePath;
-    if (sortByType) {
-      itemRelativePath += typeSubdir;
-    }
-
-    // 4. Sort by Date
-    if (sortByDate && metadata.date_epoch) {
-      const date = new Date(metadata.date_epoch * 1000);
-      const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
-      itemRelativePath += dateStr + "/";
-    }
-
-    // High quality for twitter images
-    if (ext !== ".mp4" && downloadUrl.includes("twimg.com")) {
-      if (downloadUrl.includes("?format=") && !downloadUrl.includes("&name=")) {
-        downloadUrl += "&name=orig";
-      } else if (!downloadUrl.includes("?") && !downloadUrl.includes(":orig")) {
-        downloadUrl += ":orig";
-      }
-    }
-
-    const fileName = `${slug}_${metadata.tweetID}_${index + 1}${ext}`;
+    var cleanText = (metadata.text || "tweet").replace(/https?:\/\/\S+/g, "").replace(/[^a-zA-Z0-9]+/g, "_").trim();
+    var slug = cleanText.substring(0, 50).replace(/^_+|_+$/g, "") || "tweet";
+    var breakoutPath = "../Twitter/";
+    if (sortByNames) breakoutPath += metadata.user_screen_name + "/";
     
-    return {
-      name: fileName,
-      path: itemRelativePath, // Use the path field for subdirectories!
-      req: {
-        url: downloadUrl,
-        extra: {
-          header: {
-            "User-Agent": DEFAULT_UA,
-            "Referer": "https://twitter.com/"
-          }
-        }
-      }
-    };
-  });
+    var dateStr = "";
+    if (metadata.date_epoch) {
+      dateStr = new Date(metadata.date_epoch * 1000).toISOString().split('T')[0];
+    }
 
-  // 5. Save JSON metadata
-  if (saveJson) {
-    const jsonContent = JSON.stringify(metadata, null, 2);
-    files.push({
-      name: `${slug}_${metadata.tweetID}_metadata.json`,
-      path: relativePath,
-      req: {
-        url: "data:application/json;base64," + Buffer.from(jsonContent).toString('base64'),
+    var files = metadata.media_extended.map(function (item, index) {
+      var downloadUrl = item.url;
+      var ext = ".jpg";
+      var typeSub = "images/";
+      if (item.type === "video" || item.type === "gif" || downloadUrl.indexOf(".mp4") !== -1) {
+        ext = ".mp4";
+        typeSub = "videos/";
       }
+      
+      var itemPath = breakoutPath;
+      if (sortByType) itemPath += typeSub;
+      if (sortByDate && dateStr) itemPath += dateStr + "/";
+
+      if (ext === ".jpg" && downloadUrl.indexOf("twimg.com") !== -1) {
+        downloadUrl += downloadUrl.indexOf("?") !== -1 ? "&name=orig" : ":orig";
+      }
+
+      return {
+        name: slug + "_" + tweetID + "_" + (index + 1) + ext,
+        path: itemPath,
+        req: { url: downloadUrl, extra: { header: { "User-Agent": DEFAULT_UA, "Referer": "https://twitter.com/" } } }
+      };
     });
-  }
 
-  ctx.res = {
-    name: `${metadata.user_screen_name}_${metadata.tweetID}`,
-    files: files
-  };
+    if (saveJson) {
+      files.push({
+        name: slug + "_" + tweetID + "_metadata.json",
+        path: breakoutPath,
+        req: { url: "data:application/json;base64," + base64Encode(JSON.stringify(metadata, null, 2)) }
+      });
+    }
+
+    ctx.res = { name: metadata.user_screen_name + "_" + tweetID, files: files };
+  }).catch(function (err) {
+    if (typeof gopeed !== 'undefined' && gopeed.logger) gopeed.logger.error("Twitter Error: " + err.message);
+  });
 });
