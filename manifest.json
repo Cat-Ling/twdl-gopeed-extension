@@ -1,0 +1,56 @@
+{
+  "name": "twitter-media-dl",
+  "author": "luna",
+  "title": "Twitter/X Media Downloader",
+  "description": "Download images and videos from Twitter/X using vxtwitter/fxtwitter API.",
+  "version": "1.1.0",
+  "repository": {
+    "url": "https://github.com/GopeedLab/gopeed-extension-samples"
+  },
+  "settings": [
+    {
+      "name": "sortByNames",
+      "title": "Sort by Username",
+      "description": "Save media in subfolders by username",
+      "type": "boolean",
+      "value": false
+    },
+    {
+      "name": "sortByDate",
+      "title": "Sort by Date",
+      "description": "Save media in subfolders by tweet date (YYYY-MM-DD)",
+      "type": "boolean",
+      "value": false
+    },
+    {
+      "name": "sortByType",
+      "title": "Sort by Media Type",
+      "description": "Save media in subfolders by type (image/video)",
+      "type": "boolean",
+      "value": false
+    },
+    {
+      "name": "saveJson",
+      "title": "Save Metadata JSON",
+      "description": "Save a JSON file with tweet metadata alongside the media",
+      "type": "boolean",
+      "value": false
+    }
+  ],
+  "scripts": [
+    {
+      "event": "onResolve",
+      "match": {
+        "urls": [
+          "*://twitter.com/*/status/*",
+          "*://*.twitter.com/*/status/*",
+          "*://x.com/*/status/*",
+          "*://*.x.com/*/status/*",
+          "*://vxtwitter.com/*/status/*",
+          "*://fxtwitter.com/*/status/*"
+        ]
+      },
+      "entry": "index.js"
+    }
+  ]
+}
